@@ -18,6 +18,6 @@ i.e (http://localhost:8080/c/portal/google_login?cmd=token)
 4. Click the Download JSON button to obtain the file client_secrets.json.
 ![Alt text](/configure-google-app.jpg "Configure Google App")
 
-5. Replace the file client_secrets.json in com.liferay.google with the downloaded file.
+5. Go to Site _Administration_ -> _Site Settings_ -> _Google Login Settings_ and paste downloaded JSON. 
 
 Then, you're ready to go. Deploy the hook and enjoy :)
