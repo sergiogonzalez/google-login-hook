@@ -15,8 +15,7 @@
 package com.liferay.google;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
@@ -40,6 +39,8 @@ import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.oauth2.Oauth2;
 import com.google.api.services.oauth2.model.Userinfo;
+import com.liferay.portal.kernel.log.Log;
+import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.portlet.LiferayWindowState;
 import com.liferay.portal.kernel.struts.BaseStrutsAction;
 import com.liferay.portal.kernel.util.CalendarFactoryUtil;
@@ -76,9 +77,18 @@ public class GoogleOAuth extends BaseStrutsAction {
 		String cmd = ParamUtil.getString(request, Constants.CMD);
 
 		String redirectUri = PortalUtil.getPortalURL(request) + _REDIRECT_URI;
+		
+		String clientSecretsJson = (String)themeDisplay.getScopeGroup()
+				.getExpandoBridge().getAttribute(GoogleLoginConstants.EXPANDO_KEY_GOOGLE_LOGIN_JSON_CODE, false);
+		
+		if(!Validator.isNotNull(clientSecretsJson)) {
+			_log.error(GoogleLoginConstants.EXPANDO_KEY_GOOGLE_LOGIN_JSON_CODE + " was not properly set. "
+					+ "Please go to 'Control Panel' -> 'Google Login Settings' and set proper JSON.");
+			return null;
+		}
 
 		if (cmd.equals("login")) {
-			GoogleAuthorizationCodeFlow flow = getFlow();
+			GoogleAuthorizationCodeFlow flow = getFlow(clientSecretsJson);
 
 			GoogleAuthorizationCodeRequestUrl
 				googleAuthorizationCodeRequestUrl = flow.newAuthorizationUrl();
@@ -95,7 +105,7 @@ public class GoogleOAuth extends BaseStrutsAction {
 			String code = ParamUtil.getString(request, "code");
 
 			if (Validator.isNotNull(code)) {
-				Credential credential = exchangeCode(code, redirectUri);
+				Credential credential = exchangeCode(code, redirectUri, clientSecretsJson);
 
 				Userinfo userinfo = getUserInfo(credential);
 
@@ -179,11 +189,11 @@ public class GoogleOAuth extends BaseStrutsAction {
 	}
 
 	protected Credential exchangeCode(
-			String authorizationCode, String redirectUri)
+			String authorizationCode, String redirectUri, String clientSecretsJson)
 		throws CodeExchangeException {
 
 		try {
-			GoogleAuthorizationCodeFlow flow = getFlow();
+			GoogleAuthorizationCodeFlow flow = getFlow(clientSecretsJson);
 
 			GoogleAuthorizationCodeTokenRequest token = flow.newTokenRequest(
 				authorizationCode);
@@ -195,21 +205,18 @@ public class GoogleOAuth extends BaseStrutsAction {
 			return flow.createAndStoreCredential(response, null);
 		}
 		catch (IOException e) {
-			System.err.println("An error occurred: " + e);
+			_log.error("An error occurred: ", e);
 
 			throw new CodeExchangeException();
 		}
 	}
 
-	protected GoogleAuthorizationCodeFlow getFlow() throws IOException {
+	protected GoogleAuthorizationCodeFlow getFlow(String clientSecretsJson) throws IOException {
 		HttpTransport httpTransport = new NetHttpTransport();
 		JacksonFactory jsonFactory = new JacksonFactory();
 
-		InputStream is = GoogleOAuth.class.getResourceAsStream(
-			_CLIENT_SECRETS_LOCATION);
-
 		GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(
-			jsonFactory, new InputStreamReader(is));
+			jsonFactory, new StringReader(clientSecretsJson));
 
 		GoogleAuthorizationCodeFlow.Builder builder =
 			new GoogleAuthorizationCodeFlow.Builder(
@@ -235,7 +242,7 @@ public class GoogleOAuth extends BaseStrutsAction {
 			userInfo = oauth2.userinfo().get().execute();
 		}
 		catch (IOException e) {
-			System.err.println("An error occurred: " + e);
+			_log.error("An error occurred: ", e);
 		}
 
 		if ((userInfo != null) && (userInfo.getId() != null)) {
@@ -385,12 +392,12 @@ public class GoogleOAuth extends BaseStrutsAction {
 			serviceContext);
 	}
 
-	private final String _CLIENT_SECRETS_LOCATION = "client_secrets.json";
-
 	private final String _REDIRECT_URI = "/c/portal/google_login?cmd=token";
 
 	private final List<String> _SCOPES = Arrays.asList(
 		"https://www.googleapis.com/auth/userinfo.email",
 		"https://www.googleapis.com/auth/userinfo.profile");
+	
+	private static Log _log = LogFactoryUtil.getLog(GoogleOAuth.class);
 
 }
